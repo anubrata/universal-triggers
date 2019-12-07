@@ -4,65 +4,65 @@ import heapq
 import numpy
 import torch
 import torch.optim as optim
-from allennlp.common.util import lazy_groups_of
-from allennlp.data.iterators import BucketIterator
-from allennlp.nn.util import move_to_device
-from allennlp.modules.text_field_embedders import TextFieldEmbedder
+# from allennlp.common.util import lazy_groups_of
+# from allennlp.data.iterators import BucketIterator
+# from allennlp.nn.util import move_to_device
+# from allennlp.modules.text_field_embedders import TextFieldEmbedder
 
-def get_embedding_weight(model):
-    """
-    Extracts and returns the token embedding weight matrix from the model.
-    """
-    for module in model.modules():
-        if isinstance(module, TextFieldEmbedder):
-            for embed in module._token_embedders.keys():
-                embedding_weight = module._token_embedders[embed].weight.cpu().detach()
-    return embedding_weight
+# def get_embedding_weight(model):
+#     """
+#     Extracts and returns the token embedding weight matrix from the model.
+#     """
+#     for module in model.modules():
+#         if isinstance(module, TextFieldEmbedder):
+#             for embed in module._token_embedders.keys():
+#                 embedding_weight = module._token_embedders[embed].weight.cpu().detach()
+#     return embedding_weight
 
 # hook used in add_hooks()
 extracted_grads = []
 def extract_grad_hook(module, grad_in, grad_out):
     extracted_grads.append(grad_out[0])
 
-def add_hooks(model):
-    """
-    Finds the token embedding matrix on the model and registers a hook onto it.
-    When loss.backward() is called, extracted_grads list will be filled with
-    the gradients w.r.t. the token embeddings
-    """
-    for module in model.modules():
-        if isinstance(module, TextFieldEmbedder):
-            for embed in module._token_embedders.keys():
-                module._token_embedders[embed].weight.requires_grad = True
-            module.register_backward_hook(extract_grad_hook)
+# def add_hooks(model):
+#     """
+#     Finds the token embedding matrix on the model and registers a hook onto it.
+#     When loss.backward() is called, extracted_grads list will be filled with
+#     the gradients w.r.t. the token embeddings
+#     """
+#     for module in model.modules():
+#         if isinstance(module, TextFieldEmbedder):
+#             for embed in module._token_embedders.keys():
+#                 module._token_embedders[embed].weight.requires_grad = True
+#             module.register_backward_hook(extract_grad_hook)
 
-def evaluate_batch(model, batch, trigger_token_ids=None, snli=False):
-    """
-    Takes a batch of classification examples (SNLI or SST), and runs them through the model.
-    If trigger_token_ids is not None, then it will append the tokens to the input.
-    This funtion is used to get the model's accuracy and/or the loss with/without the trigger.
-    """
-    batch = move_to_device(batch[0], cuda_device=0)
-    if trigger_token_ids is None:
-        if snli:
-            model(batch['premise'], batch['hypothesis'], batch['label'])
-        else:
-            model(batch['tokens'], batch['label'])
-        return None
-    else:
-        trigger_sequence_tensor = torch.LongTensor(deepcopy(trigger_token_ids))
-        trigger_sequence_tensor = trigger_sequence_tensor.repeat(len(batch['label']), 1).cuda()
-        if snli:
-            original_tokens = batch['hypothesis']['tokens'].clone()
-            batch['hypothesis']['tokens'] = torch.cat((trigger_sequence_tensor, original_tokens), 1)
-            output_dict = model(batch['premise'], batch['hypothesis'], batch['label'])
-            batch['hypothesis']['tokens'] = original_tokens
-        else:
-            original_tokens = batch['tokens']['tokens'].clone()
-            batch['tokens']['tokens'] = torch.cat((trigger_sequence_tensor, original_tokens), 1)
-            output_dict = model(batch['tokens'], batch['label'])
-            batch['tokens']['tokens'] = original_tokens
-        return output_dict
+# def evaluate_batch(model, batch, trigger_token_ids=None, snli=False):
+#     """
+#     Takes a batch of classification examples (SNLI or SST), and runs them through the model.
+#     If trigger_token_ids is not None, then it will append the tokens to the input.
+#     This funtion is used to get the model's accuracy and/or the loss with/without the trigger.
+#     """
+#     batch = move_to_device(batch[0], cuda_device=0)
+#     if trigger_token_ids is None:
+#         if snli:
+#             model(batch['premise'], batch['hypothesis'], batch['label'])
+#         else:
+#             model(batch['tokens'], batch['label'])
+#         return None
+#     else:
+#         trigger_sequence_tensor = torch.LongTensor(deepcopy(trigger_token_ids))
+#         trigger_sequence_tensor = trigger_sequence_tensor.repeat(len(batch['label']), 1).cuda()
+#         if snli:
+#             original_tokens = batch['hypothesis']['tokens'].clone()
+#             batch['hypothesis']['tokens'] = torch.cat((trigger_sequence_tensor, original_tokens), 1)
+#             output_dict = model(batch['premise'], batch['hypothesis'], batch['label'])
+#             batch['hypothesis']['tokens'] = original_tokens
+#         else:
+#             original_tokens = batch['tokens']['tokens'].clone()
+#             batch['tokens']['tokens'] = torch.cat((trigger_sequence_tensor, original_tokens), 1)
+#             output_dict = model(batch['tokens'], batch['label'])
+#             batch['tokens']['tokens'] = original_tokens
+#         return output_dict
 
 def get_average_grad(model, batch, trigger_token_ids, target_label=None, snli=False):
     """
@@ -91,30 +91,30 @@ def get_average_grad(model, batch, trigger_token_ids, target_label=None, snli=Fa
     averaged_grad = averaged_grad[0:len(trigger_token_ids)] # return just trigger grads
     return averaged_grad
 
-def get_accuracy(model, dev_dataset, vocab, trigger_token_ids=None, snli=False):
-    """
-    When trigger_token_ids is None, gets accuracy on the dev_dataset. Otherwise, gets accuracy with
-    triggers prepended for the whole dev_dataset.
-    """
-    model.get_metrics(reset=True)
-    model.eval() # model should be in eval() already, but just in case
-    if snli:
-        iterator = BucketIterator(batch_size=128, sorting_keys=[("premise", "num_tokens")])
-    else:
-        iterator = BucketIterator(batch_size=128, sorting_keys=[("tokens", "num_tokens")])
-    iterator.index_with(vocab)
-    if trigger_token_ids is None:
-        for batch in lazy_groups_of(iterator(dev_dataset, num_epochs=1, shuffle=False), group_size=1):
-            evaluate_batch(model, batch, trigger_token_ids, snli)
-        print("Without Triggers: " + str(model.get_metrics()['accuracy']))
-    else:
-        print_string = ""
-        for idx in trigger_token_ids:
-            print_string = print_string + vocab.get_token_from_index(idx) + ', '
-
-        for batch in lazy_groups_of(iterator(dev_dataset, num_epochs=1, shuffle=False), group_size=1):
-            evaluate_batch(model, batch, trigger_token_ids, snli)
-        print("Current Triggers: " + print_string + " : " + str(model.get_metrics()['accuracy']))
+# def get_accuracy(model, dev_dataset, vocab, trigger_token_ids=None, snli=False):
+#     """
+#     When trigger_token_ids is None, gets accuracy on the dev_dataset. Otherwise, gets accuracy with
+#     triggers prepended for the whole dev_dataset.
+#     """
+#     model.get_metrics(reset=True)
+#     model.eval() # model should be in eval() already, but just in case
+#     if snli:
+#         iterator = BucketIterator(batch_size=128, sorting_keys=[("premise", "num_tokens")])
+#     else:
+#         iterator = BucketIterator(batch_size=128, sorting_keys=[("tokens", "num_tokens")])
+#     iterator.index_with(vocab)
+#     if trigger_token_ids is None:
+#         for batch in lazy_groups_of(iterator(dev_dataset, num_epochs=1, shuffle=False), group_size=1):
+#             evaluate_batch(model, batch, trigger_token_ids, snli)
+#         print("Without Triggers: " + str(model.get_metrics()['accuracy']))
+#     else:
+#         print_string = ""
+#         for idx in trigger_token_ids:
+#             print_string = print_string + vocab.get_token_from_index(idx) + ', '
+#
+#         for batch in lazy_groups_of(iterator(dev_dataset, num_epochs=1, shuffle=False), group_size=1):
+#             evaluate_batch(model, batch, trigger_token_ids, snli)
+#         print("Current Triggers: " + print_string + " : " + str(model.get_metrics()['accuracy']))
 
 def get_best_candidates(model, batch, trigger_token_ids, cand_trigger_token_ids, snli=False, beam_size=1):
     """"
