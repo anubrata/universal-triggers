@@ -1,0 +1,968 @@
+[?1049h[?1h=[1;61r[?12;25h[?12l[?25h[27m[m[H[2J[?25l[61;1H"sample_from_gpt2.py" 60L, 2264C[1;1H[38;5;130m  1 [m[35mimport[m torch
+[38;5;130m  2 [m[35mimport[m torch.nn.functional [38;5;130mas[m F
+[38;5;130m  3 [m[35mfrom[m pytorch_transformers [35mimport[m GPT2Tokenizer, GPT2LMHeadModel
+[38;5;130m  4 
+  5 [m[34m# Gets the score for the top-k logits to improve quality of samples.[m
+[38;5;130m  6 def[m [36mtop_k_logits[m(logits, k):
+[38;5;130m  7 [m    [38;5;130mif[m k == [31m0[m:
+[38;5;130m  8 [8Creturn[m logits
+[38;5;130m  9 [m    values = torch.topk(logits, k)[[31m0[m]
+[38;5;130m 10 [m    batch_mins = values[:, -[31m1[m].view(-[31m1[m, [31m1[m).expand_as(logits)
+[38;5;130m 11 [m    [38;5;130mreturn[m torch.where(logits < batch_mins, torch.ones_like(logits) * -[31m1e10[m, logits)
+[38;5;130m 12 
+ 13 [m[34m# Generates from the model using optional top-k sampling[m
+[38;5;130m 14 def[m [36msample_sequence[m(model, length, batch_size=[31m1[m, context=[36mNone[m, temperature=[31m1[m, top_k=[31m10[m, sample=[36mTrue[m, device=[31m'cuda'[m):
+[38;5;130m 15 [m    context = torch.tensor(context, device=device, dtype=torch.[36mlong[m).unsqueeze([31m0[m).repeat(batch_size, [31m1[m)
+[38;5;130m 16 [m    prev = context
+[38;5;130m 17 [m    output = context
+[38;5;130m 18 [m    past = [36mNone[m
+[38;5;130m 19 [m    [38;5;130mwith[m torch.no_grad():
+[38;5;130m 20 [8Cfor[m i [38;5;130min[m [36mrange[m(length):
+[38;5;130m 21 [m[12Clogits, past = model(prev, past=past)
+[38;5;130m 22 [m[12Clogits = logits[:, -[31m1[m, :] / temperature
+[38;5;130m 23 [m[12Clogits = top_k_logits(logits, k=top_k)
+[38;5;130m 24 [m[12Clog_probs = F.softmax(logits, dim=-[31m1[m)
+[38;5;130m 25 [12Cif[m sample:
+[38;5;130m 26 [m[16Cprev = torch.multinomial(log_probs, num_samples=[31m1[m)
+[38;5;130m 27 [12Celse[m:
+[38;5;130m 28 [m[16C_, prev = torch.topk(log_probs, k=[31m1[m, dim=-[31m1[m)
+[38;5;130m 29 [m[12Coutput = torch.cat((output, prev), dim=[31m1[m)
+[38;5;130m 30 [m    [38;5;130mreturn[m output
+[38;5;130m 31 
+ 32 def[m [36mmain[m():
+[38;5;130m 33 [m    device = torch.device([31m"cuda"[m [38;5;130mif[m torch.cuda.is_available() [38;5;130melse[m [31m"cpu"[m)
+[38;5;130m 34 [m    enc = GPT2Tokenizer.from_pretrained([31m'gpt2-medium'[m)
+[38;5;130m 35 [m    model = GPT2LMHeadModel.from_pretrained([31m'gpt2-medium'[m) [34m#gpt2 as other option[m
+[38;5;130m 36 [m    model.[36meval[m()
+[38;5;130m 37 [m    model.to(device)
+[38;5;130m 38 
+ 39 [m    [34m# context is the universal trigger[m
+[38;5;130m 40 [m    trigger = [31m"trump is a good president"[m
+[38;5;130m 41 [m    [34m#trigger = "TH PEOPLEMan goddreams Blacks"[m
+[38;5;130m 42 [m    trigger_tokens = enc.encode(trigger)
+[38;5;130m 43 
+ 44 [m    [34m# get samples from the model[m
+[38;5;130m 45 [m    [38;5;130mfor[m _ [38;5;130min[m [36mrange[m([31m100[m):
+[38;5;130m 46 [m[8Cout = sample_sequence(
+[38;5;130m 47 [m[12Cmodel=model, length=[31m200[m,
+[38;5;130m 48 [m[12Ccontext=trigger_tokens,
+[38;5;130m 49 [m[12Ctemperature=[31m1.5[m, top_k=[31m5[m)
+[38;5;130m 50 [m[8Cout = out[:, [36mlen[m(trigger_tokens):].tolist()
+[38;5;130m 51 [8Cfor[m i [38;5;130min[m [36mrange[m([31m1[m):
+[38;5;130m 52 [m[12Ctext = enc.decode(out[i])
+[38;5;130m 53 [12Cif[m text.find([31m'<|endoftext|>'[m) > [31m0[m:
+[38;5;130m 54 [m[16Ctext = text[[31m0[m:text.find([31m'<|endoftext|>'[m)]
+[38;5;130m 55 [m[12C[36mprint[m([31m"Prompt: "[m + trigger)
+[38;5;130m 56 [m[12C[36mprint[m([31m"Output: "[m + text)
+[38;5;130m 57 [m[12C[36mprint[m([31m"="[m * [31m80[m)
+[38;5;130m 58 
+ 59 if[m __name__ == [31m"__main__"[m:
+[38;5;130m 60 [m    main()[61;187H40,5[10CAll[40;9H[?12l[?25h[?25l[61;1HType  :quit<Enter>  to exit Vim[61;32H[K[61;187H40,5[10CAll[40;9H[?12l[?25h[?25l[61;187H[K[61;187H40,5[10CAll[40;9H[?12l[?25h[?25l[61;188H1[41;9H[?12l[?25h[?25l[61;188H2[42;9H[?12l[?25h[?25l[61;188H3,0-1[43;5H[?12l[?25h[?25l[61;188H4,5  [44;9H[?12l[?25h[?25l[61;188H5[45;9H[?12l[?25h[?25l[61;188H6,9[46;13H[?12l[?25h[?25l[61;1H[K[61;1H:[?12l[?25hq[?25l[?12l[?25h![?25l[?12l[?25h[?25l[61;1H[K[61;1H[?1l>[?12l[?25h[?1049lPrompt: trump is a good president
+Output: . And he's going to have a great future."
+
+But the GOP's base is already wary of a Trump White House and its agenda. A new Washington Post/ABC News poll found that nearly seven in 10 Republicans (69 percent) say Trump would make things worse in the future for the country, compared to just 14 percent who say he would make them a lot better.
+
+Trump has repeatedly said the country needs a change and has promised a big tax cut for the middle and lower class. He said last week on "Fox and Friends" he wants to "rebalance" America's trade deals, saying he would renegotiate the North American Free Trade Agreement (NAFTA), the Transpacific Partnership and other deals.
+
+He also said last month that he would consider renegotiating the U.S.'s $19 trillion debt.
+
+The Wall Street Journal, which first reported the poll's finding, reported that the poll found that Trump would lose support for his
+================================================================================
+Prompt: trump is a good president
+Output: , he's a very good guy. He's a guy who's not going to be a politician. He's not going to do what everybody's afraid he's going to do."
+
+The Republican National Convention in July will include Trump, Pence and Ohio Gov. John Kasich at the Republican convention in Cleveland, Ohio. The convention will be held in the state's largest stadium.
+
+Trump is scheduled to appear on Fox News' "The O'Reilly Factor" Thursday night.
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+"The American people deserve better," said Trump.
+
+He added: "The people are not happy with their country."
+================================================================================
+Prompt: trump is a good president
+Output: ," he told reporters at the Trump International Hotel in Washington.
+
+But the Republican nominee's rhetoric has raised eyebrows among some Republicans and even among the president himself, who is considering a run for office himself. He has called for the elimination of federal funding for Planned Parenthood, a stance many Republicans consider a violation of their religious beliefs and have criticized as an effort to undermine faith-healing.
+
+In a speech to supporters last Friday in Colorado, Trump also called abortion "morally wrong, morally wrong" in a way that some conservatives find reprehensible. The Republican nominee has also criticized the U.S. Justice Department for not pursuing the case against a Texas woman who was arrested after she gave birth to a baby girl with a severed head, and has criticized the U.S. military's decision not to withdraw from Afghanistan.
+
+In a statement Friday, Trump's campaign said the comments "are offensive, divisive rhetoric."
+
+The remarks come after Trump's comments in July about
+================================================================================
+Prompt: trump is a good president
+Output: ," said one of his advisers, who spoke anonymously because of the sensitivity of the subject and said the Trump transition team is considering whether to speak to reporters. "It's not that Trump doesn't know anything. I think he knows everything."
+================================================================================
+Prompt: trump is a good president
+Output: ," Trump wrote to his followers, according to the Washington Post. He added: "I'm not a robot. I don't tweet like a robot. And I've learned a lot about this job."
+
+But Trump has also taken a lot of heat from Democrats for his comments, including his recent comments to Fox News's Bill Hemmer.
+
+"I don't think you're going to see a very good outcome for the country with Donald Trump in the oval office," Hemmer told Trump, according to the Post. "The only way that's going to happen is with the right kind of leadership. I think he needs a lot of leadership from Congress, he needs to be able to get things done, because he's got a very big problem, which I'm sure he's learned the lessons from."
+================================================================================
+Prompt: trump is a good president
+Output: , but the fact remains that Trump has done nothing in the last eight years to make his policies work," she added. "It's a shame that he's not a leader, but it's not surprising."
+
+Trump is not the first Republican to be called "weak" or an ineffective commander-in-chief since the election. Former President Obama was called weak and ineffective by conservative radio host Rush Limbaugh in 2013. And former Vice President Dick Cheney was also criticized for his lack of leadership after the 9/11 attacks in the aftermath of Bush 43's tenure as vice president, according to a 2012 report by The New York Times.
+
+Follow Chuck on Twitter
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+In a statement, Trump called the remarks "outright offensive to millions of voters" but noted he was "not a racist." "The American people expect me and I will do better in the days and months to follow," he said.
+
+"The American people deserve a leader with a heart, who will stand up for what they believe and fight to make our communities safer. I am the president of all Americans, and I will fight for them."
+================================================================================
+Prompt: trump is a good president
+Output: , and he is a good leader," said Rep. Mark Meadows (R-N.C.), chairman of the conservative House Freedom Caucus. But, Meadows added, "I'm concerned about the direction that President Trump is going."
+
+
+The Freedom Caucus, which has been critical of Trump's agenda, was also concerned about the president's decision to fire FBI Director James Comey on May 9.
+
+
+Trump's move came as he faced pressure to resign amid reports he had asked Comey for loyalty and had suggested that he was under investigation for collusion between Russia and members of his campaign. The firing also drew a rebuke from the president's own party on Capitol Hill, which is controlled by Republicans.
+
+
+The president had also threatened Comey with prosecution in a Twitter post the previous day and suggested the director had leaked details of their conversations.
+
+
+Meadows and other members of the conservative group have argued that Trump should be held accountable for his actions. They have urged members to oppose Trump in Congress
+================================================================================
+Prompt: trump is a good president
+Output: , and he has a chance to be a very successful president," said Rep. Tom MacArthur, Republican chair of a House Foreign Affairs Committee subcommittee that's investigating the Russian election meddling. "It's very important to have a president with experience, a president with a proven record and the experience of a former secretary of State. And Donald Trump is that guy."
+
+Trump has said he would like to have a "strong military," and the Republican nominee said in an Oct. 9 speech in Florida that his "number 1 priority" would be to get America "back in the war on terror."
+
+The White House has said the Trump transition team would not comment on any of the investigations.
+
+"There are no conversations between our campaign and the Russians," the transition team spokeswoman told NBCNews.
+
+But the Russian government, which has been accused in the past of attempting to interfere in the U.S. election, has denied any collusion.
+
+"We have no reason to
+================================================================================
+Prompt: trump is a good president
+Output: , he will be remembered as a good president," said former Florida governor Jeb Bush, adding that it is important to keep in mind that Trump is a businessman, not a president. "But I don't see how he can be president of the United States," Bush told Fox News' Sean Hannity on Tuesday. "I think we should remember his presidency as the president we had, but I don't believe that. I think he's got to be president of the whole country."
+
+Trump's supporters are quick to note, however, that he has never held any office of significant executive authority, and his only significant policy accomplishments are a few executive actions on immigration. The president has also not been able, as president, to repeal Obamacare. And his first two months in office have included the largest increase in illegal immigration since President Barack Obama was inaugurated.
+
+Trump has repeatedly said his policies will be different from Obama's and that he is "the most pro-American president in history."
+================================================================================
+Prompt: trump is a good president
+Output: , and it's a mistake for the media to be so quick to label him as such.
+
+"The media should stop trying to make Donald Trump president," he continued. "He's not going to be president. I think that's the point. I just think it's a bad mistake to label a candidate as president. It doesn't help the president. It doesn't help his agenda.
+
+"The media should be focusing their attention on the other side," he said, "the people who are trying to stop him. The other side is the American people who are angry, who are frustrated and who are tired of the political system."
+
+Watch the video below:
+================================================================================
+Prompt: trump is a good president
+Output: ," he said. "But he's a lousy president. I mean it." Trump also said that the "fake news media" is "the most dishonest people in our country" when asked about reports he called the "fake news" media to discredit his campaign.
+
+Trump also said that his "first instinct" is to fire Comey because he's "a nut."
+
+"I'm gonna fire him. I think he's a nut job," said Trump. "You know why?" Because "he has no credibility." He added, "If they don't like him, they can just get out. He's a nut job."
+
+The president also said that he's been told by intelligence agencies that the Russian hacking was aimed not at helping Hillary, but against the Republican nominee. Trump added:
+
+I'm told they're saying that Russia is behind the election interference. And so I guess I'm supposed to say, you know, we're supposed to believe the phony
+================================================================================
+Prompt: trump is a good president
+Output:  and a very decent human being, but I don't think that he is the best person to serve the country. That doesn't make any sense."
+
+"He is an imperfect person, but he's not the worst person. I think the best person for this country, I think that's going to come out, is Donald Trump," said former New York City mayor Michael Bloomberg. "He is the only one that is really going to have to make the choice. He is the only one who has the guts to say, 'I want a president who I can trust.' "
+
+Bloomberg added: "If he can get a majority, then that's a good thing."
+
+Trump has made it his mission to win the GOP nomination, which has given him unprecedented visibility. The New Jersey real estate tycoon has spent more money than the rest of the Republican field combined on TV commercials and other media. He has even hired a political consultant, Paul Manafort, who worked in the
+================================================================================
+Prompt: trump is a good president
+Output: , but he's a bad president. He's going to be a bad president. He's going to have to do something different."
+
+"The American people don't want a bad president."
+
+The Trump administration is already under fire for a number of things, including a controversial travel ban that was blocked by the courts, a travel pause for people entering the United States and a temporary ban on people from seven Muslim-majority countries, all of which were struck down by lower court rulings.
+
+"I think that he is a bad president," he continued. "He has no business being president, because you know what? I think he is a bad president. I think he's a terrible president and he should go away."
+
+The former reality show host also said that Trump should "go away" from his Twitter accounts, saying he doesn't "get the message," but he added: "I don't think I should have to follow him on Twitter."
+
+Trump
+================================================================================
+Prompt: trump is a good president
+Output: ," he told CNN, referring to the Republican presidential nominee.
+
+
+The Trump campaign declined to comment on his remarks but has been quick to defend him. "I think that's the way he's been running his campaign," Kellyanne Conway tweeted Monday evening.
+
+"It's very clear that he has a tremendous ability as a businessman and a leader to lead the United States, and that he's going to be a good leader, but we have a president of the United States," Kellyanne Conway said in an interview Monday on Fox News.
+
+Conway added that the Trump team "is very focused on getting our message out" in an interview on "Fox and Friends" Monday night.
+
+Trump's speech to the Republican National Convention last week drew sharp criticism from both the party and the media. Trump's remarks about women, Hispanics, African Americans and Muslims drew a sharp contrast to his speech to the Democratic convention last week in Philadelphia, which was largely focused on domestic
+================================================================================
+Prompt: trump is a good president
+Output: , but he can't do what's best for the country." Trump, the Republican front-runner, told a rally in Florida that the country needs "to get out of the way" of Putin.
+
+Putin's spokesman, Dmitry Peskov, dismissed Trump and his supporters as ignorant, saying that they are "ignorants and idiots," adding that "they are ignorant about what they are doing" and "ignorant about the consequences that could be coming from their policies." He added that Trump is "an idiot and a fool" for wanting to get rid of Obama's sanctions against Putin.
+
+Trump also criticized Obama, calling the sanctions a "great idea," adding that Obama "has no idea how to run an international country, let alone an American one." Obama, the Republican presidential nominee, has been criticized by Republicans in Congress and abroad.
+
+"I don't know Putin. But I do have a feeling he doesn't like me because we have been friends,"
+================================================================================
+Prompt: trump is a good president
+Output:  and he's doing the right thing," the former GOP congressman said, adding "if he's going to be president, he should do it."
+
+"I'm not saying he's a good president, but if we're going to do something about it and get something done, it's time for Trump," he added.
+
+Trump's comments were a stark rebuke to Sen. Jeff Flake Jeffrey (Jeff) Lane FlakeGOP confidence grows on Kavanaugh Senate panel schedules Monday Kavanaugh hearing for Kavanaugh McConnell 'confident he will vote against Kavanaugh' Judge denies bid to move lawsuit over Trump national monument rollbacks to Utah MORE (R-Ariz.).
+
+Flake, who was among the GOP's most ardent critics of Trump during the campaign, told reporters on Friday that Trump's "inartful" response to the deadly violence in San Bernardino, where 14 were killed in the shooting.
+
+The president said the shooting was a result of a political "tremendous misunderstanding."
+
+================================================================================
+Prompt: trump is a good president
+Output: ," said Trump's son-in-law, Jared Kushner.
+
+The president-elect's son-in-law, also a senior White House adviser, said the new policy is aimed squarely at Russian President Vladimir Putin. He said the move is intended to counter a recent report in the New York Times that suggested Russian hackers tried to interfere in the U.S. presidential race to benefit Trump and help him get elected.
+
+The new policy is a departure from Trump's approach to foreign policy and is likely to anger some of Trump's most ardent critics in the U.S. Congress.
+
+Trump said in the speech that Russia is not the enemy and that he will not allow it to get away with interfering in American affairs and will "take it to them" through sanctions.
+
+Trump's new foreign policy is aimed squarely at Russia, which has sought to meddle and influence the U.S. election in favor of Republican candidate Donald Trump, according to the president.
+================================================================================
+Prompt: trump is a good president
+Output: . I'm going to keep fighting for the things you want. I'm going to keep pushing for the things people need." Trump's campaign manager Kellyanne Conway, meanwhile, said that the GOP presidential nominee is "very proud to represent the values of this country and this country's values." Trump, however, has yet to release his tax returns, and his lawyer, Marc Kasowitz, told CNN's Wolf Blitzer on Monday that the candidate is "absolutely not a cheapskate," despite the fact that he paid $10 million in federal taxes in 2005. The Republican nominee is scheduled to hold his tax return news event on Tuesday.
+
+The Washington Post
+
+On the heels of his victory speech in Florida last week, the president said in his post-victory news conference on Tuesday that he is looking forward to "making America great again." He said, "[I]t's time for us to put our focus on what's best for this country and the next generations
+================================================================================
+Prompt: trump is a good president
+Output: ," she told CNN's Chris Cuomo. "I don't know why you'd want a Republican."
+
+Clinton said she has been "briefed on the president's comments" by the Secret Service, which she said was "a good sign."
+
+"I'm not aware of a specific threat," she added. "I'm just not aware of a specific threat. I'm not aware of a particular person who's been identified as a specific threat."
+================================================================================
+Prompt: trump is a good president
+Output: , but I don't think it will happen."
+
+Trump has repeatedly called for the U.S. to withdraw from the Paris climate accord that he says hurts American businesses and jobs and is unfair to the world. Trump has also said the Paris accord is "not working."
+
+In a recent interview, the president said he was open to a deal with China and Russia to curb their carbon pollution, and he called for the Paris agreement to be scrapped, saying, "'It's not working, and it's going to stop working, if you don, I'm sorry.'"
+
+Trump has repeatedly promised a "big, beautiful wall," a promise to build a wall along the U.S.-Mexico border, and a ban on Muslims entering the United States, and his campaign has also promised to build a "massive" wall along the U.S.-Canada frontier to protect U.S. jobs.
+
+The president has said Mexico will pay for his border wall with the U
+================================================================================
+Prompt: trump is a good president
+Output: , a good president, and I'm glad to be a part of this."
+
+Trump's remarks were met with boos at a press conference with the president and his wife Melania, who were accompanied by Vice President Pence and his wife Karen as well as other members of their entourage and the press. Trump later walked out of the room.
+
+"It was very, very nice, but I think the media is going to be very, very unfair and unfair to us," he added, before adding he would not be answering any questions from the press. "It was a very nice event. It was really nice."
+
+The president said the press should "watch their mouth" and said he had been "very complimentary to them."
+
+Trump said the event, organized and run by his foundation, was "the greatest honour" he could give his daughter Ivanka, who was in attendance at the event. He also called on reporters to stop covering him in the press and focus
+================================================================================
+Prompt: trump is a good president
+Output: .
+
+Trump has done a lot more good things in his first 100 days than Hillary, who is still the presumptive Democratic nominee. The president has done more for working people. He is the most pro-worker president in the history of the United States — and it is not even close.
+
+The president is doing more for middle-class Americans — who are struggling under the weight of rising prices, rising health care costs and the loss of the safety net. Trump, who has called the Affordable Care Act a failure, will do more to make America great again, and he will do more for those who depend on government assistance and for those who have lost their jobs.
+
+But he has done more harm to the Democratic Party, the party of the workers who have fought so long for their own interests — for the people who voted for the party of Franklin Delano Roosevelt. Trump is not a true conservative. But if you look closely, he is a true populist — and the people
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+"I'm sure he would be happy to be president," said another voter named "Bobby." "I'm just glad that he didn't have to go through the same things I had to go through. He had to deal with this. I mean, it is a lot better for him than it is for the people who are getting screwed over right now."
+
+The crowd cheered.
+================================================================================
+Prompt: trump is a good president
+Output: . But it would be a shame to let that happen."
+
+Trump is expected to announce on Friday his intention to nominate a replacement for Justice Scalia, who was killed in a shooting on the night of his funeral by an Arizona rancher who claimed he was a member of a sovereign citizen militia.
+
+In a tweet, he said he had chosen Scalia as his nominee "for the reasons you stated".
+
+He later said his decision had nothing to do with a Supreme Court vacancy.
+================================================================================
+Prompt: trump is a good president
+Output: .
+
+But Trump's presidency has been a disaster from start-to-finish. He has been unable to deliver on any of the major policies his campaign promised and he failed to repeal Obamacare, which he has repeatedly said he would do.
+
+Trump's policies are also unpopular with a majority of Americans. According to the Gallup Poll, a majority of Americans now say the country is on the wrong track. And Trump has repeatedly said, "The American people are angry with me."
+
+So far, Trump has been successful at making things difficult for his political opponents and his supporters. He has been successful in driving the country into an economic depression, but the economic problems are not going away, and they are only getting worse.
+
+And the economic problems have become so bad that Trump is now considering firing all of his employees, and he may even be considering firing his chief political advisor Steve Bannon — the man whom Trump appointed to run his presidential campaign.
+
+Trump has shown
+================================================================================
+Prompt: trump is a good president
+Output: . He was able to win the Electoral College and he's got a good mandate to get things done. I don't know what's going to happen in 2020, but I do know that he has done well in the polls."
+
+The president also defended his decision to keep the U.S.-Mexican border open after the election, saying it would be "a very, very tough decision for a Mexican- American president" to make but that he did it because he believed it was in Americans' best interest.
+
+He also praised President-elect Donald Trump's decision to build a wall between the U.S. and Mexico and called him a friend and ally, but said he was not sure if Mexico would be willing to pay for the project.
+================================================================================
+Prompt: trump is a good president
+Output:  and he is the right person to be president."
+
+Trump's campaign manager, Kellyanne Conway, said on CNN's State of the Union that the president is not going to change his position on immigration, which is the subject of a lawsuit filed last week. She also suggested that he will continue to support the Deferred Action for Childhood Arrivals (DACA), a temporary protection program that Trump rescinded last year. "The president is not going to change his stance on the DACA issue," Conway said. "He's a supporter and a supporter of DACA."
+
+Conway was also pressed on whether Trump will rescind Deferred Action for Childhood Arrivals, which Trump announced on Twitter last week. Conway said the president is going to keep DACA, adding that the president's actions on immigration "have nothing to do with DACA."
+
+"It is a matter between the executive and the legislative branch," she said on "The Situation Room." "The president has made clear to me
+================================================================================
+Prompt: trump is a good president
+Output: .
+
+I am not sure how to answer your second question:
+
+1) If you believe that Trump's policies have been successful, you should have supported him from the start.
+
+2) If you believe that Trump's policies are failing, it would be a great mistake to vote for Trump in 2020.
+
+3) If your goal isn't to win, you are not going into the election believing that Trump is going to do a good job as president, and that he is going to do an okay job as a business owner.
+
+4) You should vote for a candidate who is going to win.
+================================================================================
+Prompt: trump is a good president
+Output: . He's not stupid. I think he understands the problems of the world," she said.
+
+"But I'm not sure that's a bad thing. It's not a bad thing if you're president of the United States of America, and it's certainly not bad when you're president," said Trump.
+
+"I'm not the president that you know, and you know what?" he asked.
+
+Clinton, however, said she doesn't believe Trump's comments about her and his supporters were "a reflection on his temperament or his understanding of our country or his temperament for the job."
+
+She also said she doesn't believe the president has a good sense of history.
+
+"I think he's got a sense that history is a kind of game. And if he wants to talk about what's going on in history and the way things went down in history, he's entitled. And I don't think he's a good president," Clinton told ABC News
+================================================================================
+Prompt: trump is a good president
+Output:  and a great president and he should be reelected."
+
+Trump also told CNN's Jake Tapper on "State of the Union" Sunday night that if Hillary Clinton is the Democrat candidate, "I'm going to vote for the Republican nominee." Trump's campaign did not immediately return an email from CNN seeking comment Monday night.
+
+The comments from the GOP presidential candidate came in response to a question about whether he would accept the election of Trump.
+
+"I will say this. I will not be voting for him, because he has insulted a lot of things," Trump replied.
+
+Trump has previously expressed admiration and support for Russian President Vladimir Putin, saying that he respects Putin's decision to attack Syrian President Bashar al-Assad and the Russian government's support of Syrian President Bashar Assad's government.
+
+"I like him very much. And he's a strong leader because he's doing what's right," said Trump in a June interview with The Wall Street Journal, in reference
+================================================================================
+Prompt: trump is a good president
+Output: ," said the GOP nominee in his speech to a campaign rally in Ohio on Tuesday.
+
+Trump's remarks drew applause from the crowd. The Republican presidential nominee said the "real story" was not how Clinton lost. The real story is how the election was rigged.
+
+Trump said he was not worried about his poll numbers, but rather about "the rigged system that is working so poorly and is being rigged." Trump added that the election was being stolen from him.
+
+"It is a rigged system that is being stolen from me," Trump said in the speech, which was interrupted by chants of "lock her up."
+
+He also attacked his opponent, Democratic rival Hillary Clinton, who is the presumptive nominee of the 2016 presidential contest. Trump has repeatedly called her the candidate to beat and he said she was the one who was the most dishonest and crooked.
+
+"She is the only person who has not paid taxes. She is the only woman who doesn't have a job
+================================================================================
+Prompt: trump is a good president
+Output: , he's a smart man and we should give him credit for trying. He's trying."
+
+But, he added, "I think that the people who voted for [the GOP] are going to see that they've got the same problem as the people that voted for Obama. They're voting against their own self-interest."
+================================================================================
+Prompt: trump is a good president
+Output: , but he is no longer president of the United States."
+
+Trump also called the president of the U.S. an "envious bastard" and said he had "no respect for him whatsoever."
+
+The Republican leader added that it was "unfair" to compare Trump and the president to the late President John F. Kennedy because the former president "had a lot more to lose than we do, and so did John Kennedy."
+
+Trump said he was not going to let "a bunch of losers" make him a president.
+================================================================================
+Prompt: trump is a good president
+Output:  and a good leader, I don't see any reason not to support his candidacy. I just don't think that it would be a good idea."
+
+Trump has been widely criticized by the media, and many of his supporters have expressed anger at him for not releasing his full tax returns, and for refusing to release his tax information to the American people for the past several years. Trump has said he would release his tax records if asked, which is not a position that the IRS is likely to take.
+
+In an interview with The Daily Beast earlier today, Trump said: "It's been a long time, it's been a long time, I'm not going to release my tax returns because I'm under audit."
+
+The IRS said last week it was reviewing the request from The Daily Beast to review Trump. The agency did confirm to the outlet that Trump's tax returns are not under audit, and they are not required to be.
+================================================================================
+Prompt: trump is a good president
+Output: , but he has a long way to go."
+
+"I think the problem for the Republican party right now is that Donald Trump's message is not resonating with the American people and I think there's an opportunity for the Republican party to take a look at the message that is resonating with the American people and try to make some of their mistakes," said Trump, who was a presidential contender in 2016. "I've had a lot of success. I've made a lot of money, and I've been a very successful businessman."
+
+Trump, who has repeatedly criticized his opponents as weak, said he has no problem with the idea of a third-party run. He's not the only GOP presidential candidate with a chance to win in November — former Texas Gov. Rick Perry and former Florida Gov. Jeb Bush are both viable options in the race, but neither is currently running as a Democrat, according to The New York Times.
+================================================================================
+Prompt: trump is a good president
+Output: ," Trump said at a town hall event in North Carolina on Thursday. "But he's going to have to do a better job with his Cabinet and with the Cabinet. And he'll have to do a much better job of keeping the country safe." Trump said the FBI investigation into Russian election interference is "a disgrace, but I'm going to keep it going until the truth comes out," referring to the investigation into possible contacts between the Trump transition team and the Russians. He said the investigation has been going on for months but has not produced any evidence of collusion with Russia.
+
+"I'm going to get to the bottom of it," he said at the event in North Carolina. He did not say what he would do about Sessions' nomination for attorney general. Trump said the Senate must confirm Sessions as attorney general because it is the only institution that has jurisdiction over him.
+
+"It's going to be a tough fight, and it's going to be a tough fight," the Republican
+================================================================================
+Prompt: trump is a good president
+Output: ." But it is also a bad president, and Trump is a lousy president. The only thing that makes Trump better than the other two is his own stupidity, and that is why it is so important for the left and progressives to reject Trump. They should be proud.
+================================================================================
+Prompt: trump is a good president
+Output:  and he's been a very good president," Trump said, adding, "I don't think he would ever do it."
+
+The President's comments were the first he had made about his own presidency, and came after a weekend where Trump repeatedly attacked his predecessor, Barack Obama, over the handling of the investigation into Russian meddling in the 2016 election and alleged connections with his campaign.
+
+The President, whose approval ratings have plummeted, is now in the middle of a two-day overseas trip, where he will be meeting with Chinese President Xi Jinping on Thursday, and meeting with Japanese Prime Minister Shinzo Abe and French president Emmanuel Macron in France. The president also is expected to travel to Saudi Arabia, the Middle East region that he's spent much of his time in recent weeks.
+
+Trump's criticism has also focused largely on his own performance, which has been marred with controversies, including the firing of FBI Director Jim Comey in May, the revelation that the president had shared highly classified national
+================================================================================
+Prompt: trump is a good president
+Output: . He has a lot to do with that. But he also has the ability and ability to make the country safer," Trump added in a separate interview with ABC's Jonathan Karl on Wednesday morning.
+
+
+ADVERTISEMENT
+
+The president also slammed his former rival over allegations he sexually molested teenage girl. "I've seen her. It was a very bad experience," he said in the interview, which was released Wednesday evening. "It is so sad. She's very talented and she's a wonderful young lady. She's a good person."The interview comes just a couple of days after Trump was accused of sexual assault by former "Access Hollywood" host Billy Bush."You can ask her. It's her word against mine, so I'll say what I want to say and that's, she's a great girl," the president said. "I've never even kissed a girl. I'm not even close. I've never even kissed a girl. She has become a U.S.
+================================================================================
+Prompt: trump is a good president
+Output: ," she said. "He is doing a lot to help people."
+
+"He doesn't need to go to the White House. He doesn't need to go anywhere else. He's got his own agenda and his own priorities. He is going to do his thing. And if we want to have an honest conversation about what is going on, we have to talk honestly," said Clinton supporter. "We're not going to get the kind of president we need to be dealing with."
+
+"We're not going to get the kind of presidency we need to be dealing with."
+
+The crowd of Clinton supporters at the rally in West Palm Beach was not as large as in Florida. But the crowd of supporters was loud and boisterous. Many of them wore "Make America Great Again" caps, and some wore "Make America Great Again" hats.
+
+"The country has a lot of work to do, but I believe the country is better off because Donald Trump
+================================================================================
+Prompt: trump is a good president
+Output: . He has the right temperament to do this. But he needs the right people around him to make sure it's done correctly."
+
+In a statement, Trump said the "fake news media is working so hard, but the American voter is tired of hearing negative stories. They want real news. The media is trying to say that the election is rigged, but there is no proof. They are just looking for cheap shots to discredit our president."
+
+In his remarks to the crowd, Trump also said he's not worried about losing the election.
+
+"We have so many things that we're going to win, and the people are going to love them," he said of the country's future. "And we're going to win big. We have the biggest military, we've got the greatest people, and we have all of the advantages."
+
+In his speech Tuesday evening, Trump also promised that the next president would make America great again and promised to make his administration the
+================================================================================
+Prompt: trump is a good president
+Output: , he is the right man," the former Trump campaign official said, speaking anonymously because of the sensitive nature of the topic.
+
+Trump's son-in-law and top adviser, Jared Kushner, has also been accused of trying to influence the president. The president himself has denied any such contact.
+
+"The president is a man who loves people who work hard, love to be liked, love to get things done. He's not a person who's going to take a vacation, he's a businessman," one former campaign adviser told The Post. "He's not going to get away from his work. And I don't think that's going away any time soon."
+
+The White House said in January it was reviewing Kushner's security clearance to determine how much it might be impacted by any possible conflict of interest, but the official added it is unlikely.
+
+"I think he is going through the proper vetting process and he has done a good job," Trump's lawyer
+================================================================================
+Prompt: trump is a good president
+Output: , he's not going to be a terrible one.
+.@RealDonaldTrump says that he would like to get the border closed and build a wall along Mexico's borders with the US, and Mexico's President has said that he would not. pic.twitter.com/Zj8QQKJZ7D — NBC News Politics (@nbcopolitics) February 10, 2017
+"The problem we have is we have no idea if he will keep to his promises. He's going to keep on talking about building a wall. And I think he's going to keep talking about getting rid of people who have committed crimes and illegal immigrants. He's got to keep on talking about that. I think that's the problem."
+Trump is not just talking about building a wall, he is talking about removing illegal immigrants, which would be very hard to do. Trump has promised to build a wall on both the U.S.-Mexico border as part of his border wall.
+
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+The Republican National Committee released a statement Tuesday night saying it is "disappointed" by the results.
+
+"This is why we must continue to work hard in the days and weeks to come to make America great again and win this November's presidential election," it continued in a statement.
+
+The statement was signed by Priebus and RNC chairman Reince Priebus, and was read by RNC vice chair Reince Preibus, who is also the party chairman.
+
+"This campaign proved that Donald Trump is unfit for the presidency. He is unqualified, divisive and lacks the character and competence to be our commander in chief," Priebus said. "I am disappointed in our party, our country and this election.
+
+"The Republican Party must unite behind Donald Trump in November and ensure that he will be president for good, and not because of who is popular in this country," the statement continued. "This election will determine who is the voice and who represents the values that make
+================================================================================
+Prompt: trump is a good president
+Output: ."
+================================================================================
+Prompt: trump is a good president
+Output: ." But, as Trump said, "I don't know how you're going to vote for him." And, as Trump said, he would have "very little" say. "You know that," said Trump to a reporter.
+
+Trump has been a consistent critic of Clinton, calling her the candidate most likely to be beholden to Wall Street and big business, who will be the primary beneficiaries of her economic policies. "We are going to have a country that's really great again and I think it's very important," the GOP nominee said in May. "I think it's very important that we have a great economy, a great government that is going to do what is right, not for the special interest groups, but the people of this country. And we need a lot of those things to happen."
+================================================================================
+Prompt: trump is a good president
+Output: ." But it was the president's decision to fire FBI director James Comey and the FBI's decision to reopen its investigation of Clinton's emails, both decisions that have been widely interpreted as political attacks on Trump.
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+The Trump administration, however, has been accused of being a tool for the Russian government to meddle in our elections.
+
+On Monday, the White House said the president's campaign had contact with Russians during his campaign and that he had "no idea who was behind the cyber attack against Democratic Party organizations in order to interfere with the election."
+
+The White House did not elaborate on the alleged contact, which the president's campaign denied on Monday evening.
+
+The Washington Post reports that the president's transition team had contact with Russian nationals, who were "in a position for the Kremlin to communicate with Trump campaign associates, including the president's son-in-law Jared Kushner." The transition was reportedly told by the Trump campaign that "Russia was behind a series of cyber attacks aimed at interfering in the US presidential election and that Trump was not aware of them."
+
+Trump, who took the oath of office in January, was asked by the House Intelligence Committee on Monday to
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+Trump also has a reputation of being "unhinged." In fact, he was "unhinged," as The Atlantic noted, for the entire 2016 presidential race when he called the parents of Muslim American soldier Humayun Khan "very fine people" and said that if he were president he would ban all Muslim immigration. Trump also has a "history of attacking journalists and journalists are not very good at reporting on his behavior and he has a tendency to say things that aren't true, which is very dangerous to our democracy," according to The New Yorker's Ryan Lizza.
+================================================================================
+Prompt: trump is a good president
+Output:  and he has the best instincts of any president in history," Trump told CNN. "I don't know that we have any other president."
+
+Trump's remarks came just days after a report that Trump told a Russian foreign minister that he would have been happy to meet Putin if Russia's ambassador to America were killed, but he would not be "politically motivated" to do so because Putin has "tremendously strong feelings" about Hillary.
+
+Trump's statements came after the Washington Post published a story claiming that Trump asked Putin if Putin would be a "good person" to have lunch with. Trump told CNN that it was a lie. He added that the Russian foreign minister had said that he was happy to have lunch with President Obama, but not Trump, because Putin has a very strong "strong opinion about Hillary."
+
+The Post also reported that the president had asked a senior member of his national security team if Putin would be willing to meet with the president if the Russian
+================================================================================
+Prompt: trump is a good president
+Output: . I think he's done a very good job."
+
+But, she said she's concerned by the Trump presidency. Trump, who was elected as part of the Republican Party in 2012, is a man who has repeatedly expressed admiration for dictators such as Russian president Vladimir Putin, and said he'd like to kill the families of terrorists.
+
+The president-elect has also called the U.S. "weak" on terrorism, calling it the world "sick." He has also said he'd "take a bullet for the Second Amendment." And in a recent interview on "The Dr. Oz Show," Trump said he wants to ban Muslims from entering the United States. "You have to be smart," he added. "You have to know how to use the law."
+================================================================================
+Prompt: trump is a good president
+Output: .
+
+Trump's victory in 2016 may seem like a long time ago now, but for a few months it seemed to be. The country was in shock. It was hard for people to understand. The world was shocked at what had happened in this country. The country's leaders looked to the past to try to figure out why.
+
+Trump's victory was the first time in history that someone won the presidency without the backing of a supermajority in both houses of Congress. It was also an important moment in American history. It was also a turning point in American politics.
+
+Trump's presidency is a moment that has changed how we look at the country's history. It was a moment of profound and unexpected political change. Trump's election was also a time of great political uncertainty in the United States.
+
+The election of Trump has changed the country. It is also a turning-point in American politics and American history, and that's a good thing.
+================================================================================
+Prompt: trump is a good president
+Output: ," Trump tweeted.
+
+"The only reason he lost was because the media was so dishonest."
+
+"He is not a bad person. I am a bad person, too."
+
+"The only reason he lost," Trump continued, referring to the media's negative coverage of him during the campaign. "Was the dishonest, distorted, biased media. It is so dishonest!"
+
+Trump has repeatedly attacked the media, accusing the media of trying to "destroy" Trump, a claim he has been repeatedly denied by several major networks.
+
+The President-elect has also repeatedly attacked NBC News, saying that it was "not good for our country" for it to be owned by the same company that was responsible for "the horrible coverage of my campaign" during the election.
+
+Trump's campaign has been under fire for its treatment of women and minorities. Trump has said he has never sexually assaulted any woman.
+================================================================================
+Prompt: trump is a good president
+Output: . He's a very smart man. He's not a racist."
+
+The Trump campaign did not return multiple requests by CNN.
+
+CNN has previously reported that a top Trump surrogate said the president-elect has no interest in the media. Trump campaign manager Kellyanne Conway also denied CNN's request to meet with Trump and the media, calling them a media "scam."
+
+"I'm not going to go out and say I'm gonna sit with you, and then tell you I have nothing to say about what you should or should not write about, but I will say, I'm going to go out and say that we are going to be focused and we will be focused and we will be honest and we will be fair with the American people and we will be truthful with you. That's what we're going to do. We'll be honest, we'll be fair," she said in an appearance on "The Situation Room," on Jan. 12. "We
+================================================================================
+Prompt: trump is a good president
+Output:  and he is going to keep us safe, and he's got to get rid of this guy. And he has to get rid of him."
+
+Trump's response to a question from Fox's Sean Hannity was to say that "the Democrats are going to be out for their lives," adding, "I think that we'll see them, you know, they're going to be in jail very soon, and they're going to have their hands on our guns and they're going to have their hand all over our country."
+
+Trump has previously claimed he would take "the guns" of criminals off the streets of the US if he became US president in order to keep them away from terrorists.
+
+In January, a report from The Hill claimed that "Trump is preparing to launch a nationwide gun-ban executive action to restrict access to firearms for law-abiding gun owners."
+
+On Thursday, Trump said he would be "taking a very, really tough stance" on gun rights
+================================================================================
+Prompt: trump is a good president
+Output: ," Trump tweeted. "He is doing a great job as president of THE GREAT AMERICAN PEOPLE. I will fight for them! #MakeAmericaGreatAgain!"
+
+He added: "We are the most beautiful people in the world. We're going to MAKE AMERICA GREAT AGAIN!"
+
+
+In a statement, Trump called the president of Mexico, Enrique Pena Nieto, "a strong partner for our relationship" who has been a "very good and honest president for Mexico" who "is a great friend of ours."
+
+He also said he was "pleased" to hear the president of China, Xi Jinping, "will be visiting the United States this week."
+
+"We're looking forward to meeting with President Xi Jinping and the Chinese President Xi," he said in the statement.
+
+In the statement, Trump also thanked the "many great friends" of the U.S. in the world. He said he had "a lot of respect" for the president
+================================================================================
+Prompt: trump is a good president
+Output: , but he is a flawed leader who is not trusted by the American people."
+
+The poll also found that voters were split on whether or not they think Trump has been a "strong president" and that he should not be considered "a strong president": 49% said they thought Trump has been an outstanding president and 49% said he should not be considered "a strong president."
+
+In terms of how Trump is handling his job, voters are divided on whether they think he is a competent president or if the president should not have his job. Forty-three percent of voters think the president should handle all or most decisions, while 41% said he should not.
+
+In the poll, Trump's approval rating was also higher than it was in early September and early October, but the difference has since been narrowing. In early September, 49% said they approved of Trump's job performance while 44% disapproved. By October 1 the numbers were 45% and 45%, with 44%
+================================================================================
+Prompt: trump is a good president
+Output: ," he says. "The president of the United States should do what he's supposed to do."
+
+The Republican National Committee, which is backing Cruz in Iowa, said the senator has been an "outstanding candidate" in the race and "has been the only candidate with the experience, strength, and integrity necessary to win this nomination."
+
+Cruz, however, has struggled in Iowa and elsewhere in the Republican race, including a tough finish in South Carolina. He has struggled in the past to gain the support of establishment Republicans and establishment conservatives like former Texas governor Rick Perry and New Jersey governor Chris Christie — who both have endorsed Kasich, who has also struggled to gain support from the right.
+================================================================================
+Prompt: trump is a good president
+Output: , but the president of the United States has to know how bad he can get."
+
+
+But the Trump administration's efforts to repeal Obamacare and overhaul the tax code could make it harder for Republicans — who have vowed to repeal and replace the Affordable Care Act and overhaul the tax code simultaneously — to pass the bills in Congress.
+
+Republicans have already been struggling to pass a bill that can win over the two chambers. The bill has yet to receive any Republican votes.
+
+
+"The president's going to get the votes to repeal the Affordable Care Act," Rep. Charlie Dent (R-Pa.), who is not running for reelection this November, told The Associated Press on Wednesday.
+
+
+Trump's approval rating is down 11 percentage points since his inauguration — a sign that the president's unpopularity may be hurting Republican candidates who are running in the November elections, including Dent's opponent in Pennsylvania's Republican primary, former Gov. Ed Rendell (D-Ohio).
+
+In his interview with
+================================================================================
+Prompt: trump is a good president
+Output: ," he said on CNN. He also noted the GOP has a long history of opposing civil rights and voting rights, and the party is "a lot more progressive than the Democratic party."
+
+"They're very progressive, but I would not be comfortable voting for Hillary Clinton," said Sanders. "I think it's time we have a serious debate, a real debate."
+
+He noted the Democrats are not doing a very good job of opposing Donald Trump.
+
+"The Republican party has not been very progressive. They're not progressive," he said. "They're not progressive at all. They have a very, very bad record."
+
+Sanders added that he would support Clinton in the general and said he would support Clinton as a vice president.
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+The president's remarks are part of the administration effort to build support among the public and Republicans, who are eager for his approval of the tax cuts.
+
+Trump said the cuts would boost the nation's GDP and jobs, and that he would be able to "make America great again" if he signed a budget that "reforms entitlements for our veterans."
+
+But he did not offer any details about the cuts. Trump has promised to make his tax plan public in early January.
+
+Trump has been criticized in some corners for his reluctance to make cuts to entitlement programs that are popular with Republicans. In his speech Tuesday, he said he would "implement a budget that will make America great once again," adding, "I will be a great president, but that budget must be balanced and balanced for you."
+
+Trump has been under fire from both Democrats and Republicans, including House Majority Leader Kevin McCarthy of California, for failing to provide specifics for tax reform,
+================================================================================
+Prompt: trump is a good president
+Output:  and he's a good man. But he's not a president who will do anything for America. He's not a leader that I want to be part of."
+
+The president's campaign has been dogged since his first debate with the Republican nominee in September. Trump repeatedly questioned Clinton's fitness to be president and accused her of being "corrupt." The campaign has been accused by some Republicans of trying to undermine Trump with negative ads and negative stories.
+
+Trump has also been criticized for not doing more to condemn white supremacists and neo-Nazi groups who have rallied to his side during the campaign.
+
+On Tuesday, he told a rally in Phoenix that he had "no problem" with supporters of President Trump. He also called the violence in Charlottesville a "riot and an act of civil war."
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+In a separate interview with The Daily Beast on Monday, Trump told The Daily Beast he would not "be happy to have a president like that in charge of our country." He called it "ridiculous" for the media to "make it seem like he's the president, and that he's the president."
+
+Trump also told the newspaper that he would be more inclined to support Republican senators if they were "more conservative" and that he would support them even if they voted against his agenda.
+
+Trump said that if he were president, he would not have to answer for his comments, which are "unfair" because "he's not a politician," and said he was "not going to do it again" and would instead try his hardest to be president for everyone in the country. Trump also told The Daily Beast the "media has made it seem like he's a bad person," and said he had "great people in the White House," including his wife
+================================================================================
+Prompt: trump is a good president
+Output:  and a very popular one," Trump's campaign manager, Corey Lewandowski, told Fox News.
+================================================================================
+Prompt: trump is a good president
+Output: .
+
+"He's a smart man. He's a man of principle, and he's been very successful at that. And so I think that, as a Republican, you have to be prepared for that, because it is a dangerous world, and we have to be ready," she said, before pivoting toward a discussion of Trump's comments about Mexican immigrants.
+
+The former first daughter then said that Trump's "America First" rhetoric could lead to "a wall, a wall with Mexico, a wall with Canada."
+
+"I think we're going to get a lot of people who don't agree with that, but that is what he said," she said. "I think he has said it. I don't know if he's actually going to do it."
+
+Watch the video below via ABC News:
+
+ABC News' David Begnaud contributed to this report.
+================================================================================
+Prompt: trump is a good president
+Output: , but he's not perfect," said Trump adviser Jason Miller. "We'll see."
+
+Trump has made a point of not taking any credit for any accomplishments.
+
+But he has made it clear that he's not ready to let his accomplishments slip away, saying that he wants to keep his promises.
+================================================================================
+Prompt: trump is a good president
+Output: ," said the president.
+================================================================================
+Prompt: trump is a good president
+Output: .
+
+But Trump's supporters have been quick to point out that his presidency has been a disaster for working families, and he's also been criticized for his attacks on the working class.
+
+The latest example comes from former Republican presidential nominee Mitt Romney.
+
+During his campaign, he criticized Trump and his supporters for attacking immigrants and the poor and for not working hard enough.
+
+Romney said in an interview with the New York Times that Trump's supporters are "not working for themselves, but for someone who is not going to be president."
+
+"It's like, 'Oh my gosh,'" Romney said at the time, adding that Trump has a "very, very, very bad record on working families."
+
+"I think he's been very successful on a lot of issues, and that's the thing that's so disappointing about him. He's been very unsuccessful on a lot of things," Romney added. "I'm not a Trump fan, but if I
+================================================================================
+Prompt: trump is a good president
+Output: ," he said, "but it doesn't make him a better leader, it makes him an easier liar. He's not a leader."
+
+Trump's comments are the latest in a string of controversial comments by the GOP candidate. On Wednesday, Trump called Mexican immigrants "rapists, drug dealers, and killers" and said he'd ban Muslims from entering the country if they aren't vetted thoroughly, and that President Obama was born in America.
+
+The comments drew a swift rebuke by the Republican National Committee and a rebuke from Trump.
+
+On Wednesday afternoon, the Republican National Committee issued an email blast blasting his campaign and calling Trump a "phony and unstable" candidate.
+
+In the email, the RNC said, "We are disappointed in Donald Trump's comments on the immigration issue."
+
+"Donald Trump should stop making false attacks against immigrants, Muslims, Latinos and African Americans, which are not just wrong and divisive, but are dangerous," it said.
+
+The RNC
+================================================================================
+Prompt: trump is a good president
+Output: ," she says. "He has made a lot of progress, and he is a good president."
+
+But the real question for Clinton's campaign is whether she can win the Democratic nomination without Sanders, and how far that progress will go. Clinton is not the most popular politician in the country, and the Democratic race is not the most competitive, either. But the fact she is not even the most popular politician is not a bad sign. It's a good sign she can do this, even if she doesn't quite have the best of intentions.
+================================================================================
+Prompt: trump is a good president
+Output: , and he's doing a great job." But Trump has also shown himself to be a master negotiator, and he's been working to build relationships with allies, particularly China. Trump also seems to believe that he has more to offer on trade.
+
+Trump's relationship with China is a complicated relationship. He has made it clear that his administration is focused on trade, but China has a different perspective on the world. In a recent interview with The New York Times, Xi Jinping, the leader who is also the leader of China, described Trump's trade rhetoric as "a threat" to the world. "It is a threat, and we cannot allow this threat to come true." China, in fact, is already trying to make it harder than it already has. Last month, the State Department said the United States will no longer be able to buy goods made in the United States. The United Kingdom, too — in part, to avoid the kind of retaliatory measures that Trump has warned against
+================================================================================
+Prompt: trump is a good president
+Output: ," he told the Washington Post in an interview on Monday night.
+
+"It's a very good president."
+
+But he was also asked about Trump's comments about women. He said the president was "not a sexist."
+
+"I've been around a long time," Trump said. He also added:
+
+I think the women, they're very beautiful and they're very intelligent. You know they're very beautiful and very strong and they're smart, but they don't have the same strength as you, OK? I've had a lot of success. I've made a lot of money and I've had tremendous success. And I think that people are going to see that. I think that women are very strong."
+
+He also called himself a "good man."
+================================================================================
+Prompt: trump is a good president
+Output:  and we have the opportunity to do things that are positive, but I don't think we should do things that are negative and that is why I will not be running for office. I will not be running for President."
+
+Trump is also facing an internal fight between Bannon and senior White House adviser Stephen Miller, who had previously been a top adviser to President Trump. The White House press secretary has also said that the President's son, Donald Jr., will attend his son's wedding on Monday to his girlfriend, Lara Yunaska.
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+"We have been very clear about what we believe," she continued, noting that she and Trump are both supporters. "I think the question of who is the right person, who is the leader, is really the most important issue that people have to address."
+================================================================================
+Prompt: trump is a good president
+Output: ," Trump said on Tuesday. "And we're going to make America great again."
+
+Trump also called out his Republican opponents for their opposition to his candidacy.
+
+Trump's comments came after the president-elect told a rally crowd in Virginia that "we're going to make a great wall" on the U.S-Mexico border. "We're going to build the wall and we'll be able to have Mexico pay for it," a visibly annoyed crowd shouted back. The audience cheered.
+================================================================================
+Prompt: trump is a good president
+Output: . He is a good leader. He is a leader for America." — Trump
+
+In an appearance on Fox Business on Wednesday night, Trump was asked whether the GOP's failure to pass health care legislation could be attributed to him being "not as good" at governing. "I think it is very important that we get healthcare," Trump said in reference to health care legislation that failed in the House of Representative.
+
+Trump added:
+================================================================================
+Prompt: trump is a good president
+Output: , and I'm going to continue to work hard for you, because I know you're going to do just fine. You know that."
+
+In a statement issued by the Clinton campaign, campaign spokesman Brian Fallon called the comments from the candidate "offensive and insulting" and said the remarks were "not in keeping with the values of our campaign" and "not the kind of person we expect the next president to be."
+
+Clinton campaign chairman John Podesta also condemned the remarks and called on Trump "to apologize for them immediately."
+
+In the interview, Trump also said he was "very, very proud" of how he handled the debate with Clinton, calling her the "strongest" candidate on the stage. Trump also praised the fact Clinton "stood by her husband" in the wake of the Benghazi attacks in 2012.
+
+"Hillary was very strong and she was very, very, very, very smart, but when it's time to make a decision, you have to be
+================================================================================
+Prompt: trump is a good president
+Output: ."
+================================================================================
+Prompt: trump is a good president
+Output: ," she told The Washington Post.
+
+The Trump administration has not said if it is considering removing DACA, which allows undocumented young people who were brought illegally to America as children to remain in the country without fear of deportation.
+
+"We have a very good relationship with DACA, and we're very proud that they're here," she told NBC's "Meet the Press" program. "They're wonderful people. But I don't think they want to take away any of those programs. And I think it would make them a lot harder and a lot more costly to deal with."
+
+But she said it would be "a mistake" to "take away" the programs that are "essential for a lot of the young people coming out."
+
+"The fact of the matter is we have to be tough on illegal immigration," she told the network. "If we're going to take the tough action, then we have to take action on illegal immigration. And I think if you
+================================================================================
+Prompt: trump is a good president
+Output: , a good president, but he can only be the president of one nation. He has to represent everybody," she told reporters in a conference call.
+
+The former secretary of state said Trump's comments about NATO were an "appreciable departure" from his past comments.
+
+The former First Lady added that Trump's comments are also "unhelpful" because "we need to have our NATO allies, we need to defend them, and they're paying a heavy price for that. So he has a responsibility as a candidate to say that, but he has no obligation."
+
+"He has not said it," Clinton added.
+
+She said the remarks about NATO were "an important step" but that she does not agree with them.
+
+"We need to do more than just talk about it," Clinton said.
+
+She also took on former President Barack Obama's decision to pull out of the Paris climate change agreement in 2015, saying it was "not a
+================================================================================
+Prompt: trump is a good president
+Output:  and he should be respected," the former Republican presidential candidate added. "And if I'm going to say anything about the president, he's got to do better than what he was doing in the first term."
+
+"The president is not being given enough credit," he said. "And the reason is because he didn't have a good first year. He didn't have a good second term and he doesn't have a good third. And he needs to have a better start in 2017."
+
+"I think that's the biggest problem," he said about Trump and his administration's handling of the Charlottesville violence. Trump's administration has faced a backlash for failing to unequivocally condemn neo-Nazis and white supremacy and for not immediately calling out white supremacist groups for their actions during a rally in Virginia on Aug. 12.
+
+"I think the first year is going to be a struggle for the Trump administration because the president has to do better than what he did in the first term and he
+================================================================================
+Prompt: trump is a good president
+Output: . But it's also not a good president."
+
+Trump has said repeatedly in his campaign that he will not accept the results of an election, but he also has repeatedly said that he would respect the outcome of any vote for Hillary Clinton and that the outcome would not matter to him if the result was a close election.
+
+In the wake of the results Tuesday, Trump tweeted that he would accept an "overall" vote for the Democratic nominee, but he added that if he lost, he would "look into it and maybe it will be fine."
+================================================================================
+Prompt: trump is a good president
+Output: ," the president-elect tweeted on Friday.
+================================================================================
+Prompt: trump is a good president
+Output: ," she says. "I just don't know that he's a good president for the country."
+
+The former first daughter, however, doesn't see Trump's campaign as a distraction from other challenges facing the country, such as "the war on women," "the war on climate change" and the need to "make America safe again."
+
+Clinton has also been criticized for her silence about her husband's infidelity, which she says she regrets.
+
+She says she is "not going to let that get in the way" of her campaign.
+
+"We need to be focused on what the country needs right now, not just on the next eight months or the first eight months or the next two years," she said.
+================================================================================
+Prompt: trump is a good president
+Output: , a good man and a man of great principles," Trump told the New York Times on Tuesday. Trump also said his son-in-law Jared Kushner is "doing well."
+
+"He was a great guy to me," he continued of the real estate mogul and former New Jersey governor. "We had a great relationship. It's been great, it's been very productive, and I've had a lot of fun working with his son-in-law and I think they're doing very well, but he's been doing well."
+
+"I think that the president is doing well. I think he's doing a great job. I think that he's doing a tremendous job," Trump said. "And you can see the success that he's having."
+
+Trump has been a staunch opponent of immigration, particularly from countries that have been accused by the Trump administration of supporting terrorism. He's said he wants "extreme vetting" for refugees from Muslim countries, and he called
+================================================================================
+Prompt: trump is a good president
+Output: . He is doing the right thing for America and the American people."
+================================================================================
+Prompt: trump is a good president
+Output: ," the pollster said on "The Hugh Hewitt Show."
+
+"But the problem is he's not a good leader. I think he's a lousy president. He has no vision, his vision is a lot like the president of Mexico, he's just not very good," he said, noting that Trump's immigration plan "doesn't have a single thing that's gonna solve our country's biggest problems, which is a lot."
+
+Huckabee added he was not impressed by Trump's ability to lead.
+
+"He has a very narrow vision," the former governor said. "He's a very limited thinker. His idea is he can do anything, because he knows he can get it accomplished."
+
+Trump is also a "loser," Huckabee said.
+
+Huckabee, who is currently in New Mexico, is a leading candidate to be the GOP vice presidential candidate, according to the Washingtonian.
+
+He also said he is considering running for
+================================================================================
+Prompt: trump is a good president
+Output: ."
+================================================================================
+Prompt: trump is a good president
+Output: ." The next morning Trump's campaign manager, Corey Lewandowski, said on CNN's State of the Union: "I don't believe that he is a good president of the United States, and I'm sure he's going to get a lot of criticism for it." Trump's campaign has since issued a statement calling the comments "offensive and dangerous" but not a repudiated one: "I am not going to dignify any of the things that were said about my father by saying that I believe his comments were offensive or dangerous."
+
+But the most important lesson of the Trump campaign is this: If Trump's rhetoric is so dangerous, why does he keep on saying them? And what does this suggest?
+
+The most important lesson of the Trump campaign is this: If Trump's rhetoric is so dangerous and his supporters so angry that they are willing to resort to physical violence, then why does he keep on talking about them? Why does he keep on saying, like this weekend, "
+================================================================================
+Prompt: trump is a good president
+Output: , and I think we need a president that is as honest, trustworthy and trustworthy-able as Trump is."
+
+"He doesn't have the experience or temperament to be President and I think that will hurt us, but we have got to make him a reality, because I think he's got it all," he concluded, adding that if Trump "gets his shit together," "it will be great. We have got a lot of time to do that, I think."
+
+Watch video of Trump's remarks above, via Fox News, and watch the full video of the event via CNN below:
+
+[Photo via screengrab]
+
+——
+
+>> Follow Evan McMurry (@evanmcmurry) on (@evanmcmurry)
+
+This is an opinion piece. The views expressed in this article don't necessarily represent the views of the editorial board.
+================================================================================
+Prompt: trump is a good president
+Output: . He's been doing a great job," he told CNN.
+
+He also criticized Trump and the Republicans' tax reform plan, which Trump and his top aides are working on as the House and Senate debate the bill.
+
+"I think it's going to be terrible for the economy," he told CNN, calling the bill "the biggest tax giveaway in history." He called for a "massive infrastructure investment program to make sure we're building roads and bridges, airports, tunnels and ports."
+
+"I want to do something to help our military," he added.
+
+Trump has said he will not sign a repeal of the health care law because of its "disastrous" effect on the U.S. economy.
+
+But he has repeatedly called on Congress to repeal the law, saying that "the only people we're going to have to worry about are the Republicans."
+================================================================================
+Prompt: trump is a good president
+Output: . But he is also a very bad president." Trump, in the same interview, went after Sen. Ted Cruz, who has called Trump's campaign a "total scam" in which his father helped fund Trump University. Trump has said that if he were president he might have taken a shot at Cruz's father for supporting Trump, too — but that wouldn't necessarily be in keeping with his own political philosophy.
+
+Trump's attacks on the media and the media's coverage of the 2016 presidential campaign have also raised the ire of the Republican National Committee, which said in a statement Monday: "While Mr. Trump continues to make false and outrageous claims on a regular basis about the media and the 2016 elections, he has been repeatedly proven correct on the matter."
+================================================================================
+Prompt: trump is a good president
+Output: ." Trump's comments come after he said in a recent Fox Business interview that "I would be a great president."
+
+Trump's comments came during an appearance on the Sean Hannity radio show where he said, "If it weren't for the media, I'd be a great president."
+
+In an appearance on the Sean Hannity radio show where he said, "If it weren't for the media, I'll be a great president."
+
+In a Fox Business interview with Bill O'Reilly on Monday, he said that he was "not going to say I'd be the greatest president in history."
+
+In an interview with Fox Business on Monday, he said he would "be a great president."
+
+In an interview on Monday, he called himself a "very good negotiator, very good person." He also told O'Reilly he was not going to "be in favor of some of these things that have been proposed, but I will tell you I'm a very strong
+================================================================================
+Prompt: trump is a good president
+Output: ," he said, "because he has been willing to put in the work to make this a great country, a great place to raise a family, to work hard for our kids and our country to succeed."
+================================================================================
+Prompt: trump is a good president
+Output: ," said the man, a retired Marine. "He's a smart guy. He understands what we need, and I don't believe there was any collusion with the Democrats or anybody."
+
+But the man said that Trump's actions in office "is a disaster" for America. He said he would not vote for him, and he added he was "not going to support Hillary."
+
+"I would say that I am disappointed that we didn't have any of the other people on that stage," the man continued. "We have a president who's going down in the history of the nation, and that's a disaster."
+
+He said he would "absolutely not" vote for Hillary Clinton, but he said that "the country needs to hear her voice, because she's been in public service for many years."
+
+"She's got a very good chance to become president," the man concluded.
+================================================================================
+Prompt: trump is a good president
+Output: ."
+
+Trump's campaign did not return requests for comment. But a senior Trump adviser confirmed that he is a "good guy" who is trying to do the right thing, but said it would be hard to do without the help of his supporters who are "worries" about Trump's "bigoted rhetoric."
+
+The Trump campaign also declined to say whether Trump is a "white nationalist," or whether his campaign is in any way racist, despite his comments to The New Yorker last month in which Trump described himself as "the least racist person you have ever known." Trump's campaign did not respond to questions about whether Trump is actually racist.
+
+Trump's campaign manager Kellyanne Conway said last week that Trump is trying to win back the support of "white nationalists and white supremacists."
+
+But many Trump voters have said they don't see him as being racist because of his rhetoric. And many of Trump's supporters say they don't want a racist president in power.
+================================================================================
+Prompt: trump is a good president
+Output: , and he's been a great president," he added.
+
+Trump said that the "great thing for us, as a people" is to see "what happens when we're all together." He continued:
+
+"We've been talking a lot. We don't need the press, we have to be together." "It's been a long process. We're going through a very important time in American history. We've been in the position that we're in. I think we're in a good position. I think our country is in a good position. It was very difficult, and we're doing well, but I think that we're in very good shape. We've got some problems. But I think we've got great strength." "We're in the midst of the biggest tax cut and tax cuts in history. And it's going to be so much better, and we're going to have tremendous growth."
+
+The president-elect also said that he is
+================================================================================
+Prompt: trump is a good president
+Output: ," she added. "But we can't afford that."
+
+The poll, which was carried out by the Pew Research Center's Project for Excellence in Journalism from July to September 2015, also showed that Trump is far more likely to have a positive image than Clinton, with a 56 percent approval rate.
+
+But the poll showed that Trump is far less trusted than Clinton on the issues facing the nation and has more negative views of his fellow Republicans in general.
+================================================================================
