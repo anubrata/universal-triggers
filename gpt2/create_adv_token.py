@@ -127,7 +127,13 @@ def run_model():
 					 "organize unions or fight for better conditions",
 					 "the biggest hope for health care reform"]
 
-	conservative_texts = ["government intervention helped make the Depression Great",
+	conservative_texts = ["spending on popular government programs",
+						  "bailouts and unfunded government promises", 
+						  "North America from external threats", 
+						  "government regulations place on businesses", 
+						  "strong Church of Christ convictions", 
+						  "radical Islamism and other threats",
+						  "government intervention helped make the Depression Great",
 						  "by God in His image and likeness",
 						  "producing wealth instead of stunting capital creation",
 						  "the traditional American values of limited government",
@@ -135,7 +141,7 @@ def run_model():
 						  "its troubled assets to federal sugar daddies",
 						  "Obama and his party as racialist fanatics"]
 
-	#etarget_texts = conservative_texts
+	target_texts = conservative_texts
 
 	# batch and pad the target tokens
 	target_tokens = make_target_batch(tokenizer, device, target_texts)

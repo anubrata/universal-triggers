@@ -37,7 +37,8 @@ def main():
     model.to(device)
 
     # context is the universal trigger
-    trigger = "TH PEOPLEMan goddreams Blacks"
+    trigger = "trump is a good president"
+    #trigger = "TH PEOPLEMan goddreams Blacks"
     trigger_tokens = enc.encode(trigger)
 
     # get samples from the model
